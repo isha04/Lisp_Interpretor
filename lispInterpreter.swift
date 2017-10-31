@@ -39,23 +39,6 @@ func isAlphabet (char: Character) -> Bool {
     return false
 }
 
-func identifier (input: Substring) -> ParseResult {
-    var index = input.startIndex
-    if isOperator(arithmaticOperator: input[index]) {
-        if input[input.index(after: index)] == "=" {
-            index = input.index(after: index)
-        }
-        return(input[...index], input[input.index(after: index)...])
-    }
-    if isAlphabet(char: input[index]) {
-        while isAlphabet(char: input[index]) {
-            index = input.index(after: index)
-        }
-        return(input[..<index], input[index...])
-    }
-    return nil
-}
-
 
 func boolParser (input: Substring) -> ParseResult {
     if input.count < 5 {
@@ -185,6 +168,7 @@ func NumberParser(input: Substring) -> ParseResult {
     return (output, input[index...] )
 }
 
+
 func stringParser(input: Substring) -> ParseResult {
     if input[input.startIndex] != "\"" {
         return nil
@@ -214,14 +198,6 @@ func stringParser(input: Substring) -> ParseResult {
 }
 
 
-func defineParser(input: Substring) -> ParseResult {
-    if identifier(input: input)?.output as! String == "define" {
-        return ("define", input[input.index(input.startIndex, offsetBy: 5)...])
-    }
-    return nil
-}
-
-
 func isSpace(space: Character) -> Bool {
     switch space {
     case " ", "\t", "\n", "\r": return true
@@ -239,6 +215,58 @@ func spaceParser (input: Substring) -> ParseResult  {
         index = input.index(after: index)
     }
     return(input[..<index], input[index...])
+}
+
+func identifier (input: Substring) -> ParseResult {
+    var index = input.startIndex
+    if isOperator(arithmaticOperator: input[index]) {
+        if input[input.index(after: index)] == "=" {
+            index = input.index(after: index)
+        }
+        return(input[...index], input[input.index(after: index)...])
+    }
+    if isAlphabet(char: input[index]) {
+        while isAlphabet(char: input[index]) {
+            index = input.index(after: index)
+        }
+        return(input[..<index], input[index...])
+    }
+    return nil
+}
+
+func defineParser(input: Substring) -> ParseResult {
+    var rest = input
+    var output = [String: Any]()
+    var key = ""
+    var value: Any?
+    if let result = paranthesisParser(input: rest) {
+        rest = result.rest
+    }
+    if let result = identifier(input: rest) {
+        rest = result.rest
+        if String(describing: result.output) != "define" {
+            return nil
+        }
+    }
+    while rest[rest.startIndex] != ")" {
+        if let result = spaceParser(input: rest) {
+            rest = result.rest
+        }
+        if let result = identifier(input: rest) {
+            rest = result.rest
+            key = String(describing: result.output)
+        }
+        if let result = spaceParser(input: rest) {
+            rest = result.rest
+        }
+        if let result = expressionParser(input: rest) {
+            rest = result.rest
+            value = result.output
+        }
+        output[key] = value
+        env[key] = value
+    }
+    return (output, rest)
 }
 
 
@@ -262,10 +290,6 @@ func ifParser (input: Substring) -> ParseResult {
         if let result = sExpressionParser(input: rest) {
             rest = result.rest
             expressionArray.append(result.output)
-        }
-        if let result = ifParser(input: rest) {
-            rest = result.rest
-            output = result.output
         }
     }
     if String(describing: expressionArray[0]) == "true" {
@@ -344,4 +368,6 @@ func sExpressionParser (input: Substring) -> ParseResult {
     return (output!, rest)
 }
 
-expressionParser(input: file)?.output
+//expressionParser(input: file)?.output
+//ifParser(input: file)
+defineParser(input: file)
