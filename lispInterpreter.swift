@@ -5,6 +5,7 @@ let fileContents = (try? String(contentsOfFile: path, encoding:String.Encoding.u
 var file = fileContents[fileContents.startIndex...]
 
 typealias ParseResult = (output: Any, rest: Substring)?
+typealias Parser = (Substring) -> ParseResult
 
 var env = [String: Any] ()
 env = ["+" : {(input: [Double]) -> Any in (input.reduce(0, {$0 + $1}))},
@@ -217,6 +218,19 @@ func spaceParser (input: Substring) -> ParseResult  {
     return(input[..<index], input[index...])
 }
 
+func factoryParser (parsers: Parser...) -> Parser {
+    func newParser(input: Substring) -> ParseResult {
+        for parser in parsers {
+            if let result = parser(input) {
+                return result
+            }
+        }
+        return nil
+    }
+    return newParser
+}
+
+
 func identifier (input: Substring) -> ParseResult {
     var index = input.startIndex
     if isOperator(arithmaticOperator: input[index]) {
@@ -229,7 +243,7 @@ func identifier (input: Substring) -> ParseResult {
         while isAlphabet(char: input[index]) {
             index = input.index(after: index)
         }
-        return(input[..<index], input[index...])
+        return(String(input[..<index]), input[index...])
     }
     return nil
 }
@@ -259,13 +273,14 @@ func defineParser(input: Substring) -> ParseResult {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = expressionParser(input: rest) {
+        if let result = expressions(rest) {
             rest = result.rest
             value = result.output
         }
         output[key] = value
         env[key] = value
     }
+    rest.remove(at: rest.startIndex)
     return (output, rest)
 }
 
@@ -287,7 +302,7 @@ func ifParser (input: Substring) -> ParseResult {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = sExpressionParser(input: rest) {
+        if let result = expressions(rest) {
             rest = result.rest
             expressionArray.append(result.output)
         }
@@ -303,38 +318,6 @@ func ifParser (input: Substring) -> ParseResult {
 }
 
 
-func expressionParser (input: Substring) -> ParseResult {
-    var output: Any?
-    var rest = input
-    
-    if let result = identifier(input: rest) {
-        output = result.output
-        rest = result.rest
-    }
-    if let result = boolParser(input: rest) {
-        output = result.output
-        rest = result.rest
-    }
-    if let result = stringParser(input: rest) {
-        output = result.output
-        rest = result.rest
-    }
-    if let result = NumberParser(input: rest) {
-        output = result.output
-        rest = result.rest
-    }
-    if let result = ifParser(input: rest) {
-        rest = result.rest
-        output = result.output
-    }
-    if let result = sExpressionParser(input: rest) {
-        output = result.output
-        rest = result.rest
-    }
-    return (output as Any, rest)
-}
-
-
 func sExpressionParser (input: Substring) -> ParseResult {
     var rest = input
     var output: Any?
@@ -344,6 +327,9 @@ func sExpressionParser (input: Substring) -> ParseResult {
         return nil
     }
     if let result = paranthesisParser(input: rest) {
+        rest = result.rest
+    }
+    if let result = spaceParser(input: rest) {
         rest = result.rest
     }
     if let result = identifier(input: rest) {
@@ -356,9 +342,13 @@ func sExpressionParser (input: Substring) -> ParseResult {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = expressionParser(input: rest) {
+        if let result = expressions(rest) {
             rest = result.rest
-            argArray.append(result.output as! Double)
+            if env.keys.contains(String(describing: result.output)) {
+                argArray.append(env[String(describing: result.output)] as! Double)
+            } else {
+                argArray.append(result.output as! Double)
+            }
             if argArray.count > 1 {
                 output = (env[Operator] as! ([Double]) -> Any)(argArray)
             }
@@ -368,6 +358,30 @@ func sExpressionParser (input: Substring) -> ParseResult {
     return (output!, rest)
 }
 
-//expressionParser(input: file)?.output
-//ifParser(input: file)
+func specialFormParser (input: Substring) -> ParseResult {
+    var rest = input
+    var output: Any?
+    if let result = defineParser(input: rest) {
+        rest = result.rest
+        output = result.output
+    }
+    if let result = spaceParser(input: rest) {
+        rest = result.rest
+    }
+    if let result = ifParser(input: rest) {
+        rest = result.rest
+        output = result.output
+    }
+    
+    if let result = expressions(rest) {
+        output = result.output
+        rest = result.rest
+    }
+    return (output!, rest)
+}
+
+let expressions = factoryParser(parsers: identifier, boolParser, NumberParser, stringParser, sExpressionParser)
+//sExpressionParser(input: file)?.output
+ifParser(input: file)
 defineParser(input: file)
+specialFormParser(input: file)
