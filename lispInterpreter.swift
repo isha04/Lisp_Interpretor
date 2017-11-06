@@ -26,6 +26,7 @@ func paranthesisParser(input: Substring) -> (output: Any, rest: Substring)? {
     return nil
 }
 
+
 func isOperator (arithmaticOperator: Character) -> Bool {
     switch arithmaticOperator {
     case "+", "-", "*", "/", ">", "<", "=" : return true
@@ -42,18 +43,17 @@ func isAlphabet (char: Character) -> Bool {
 
 
 func boolParser (input: Substring) -> ParseResult {
-    if input.count < 5 {
+    if input.count < 2 {
         return nil
     }
-    if input[...input.index(input.startIndex, offsetBy: 3)] == "true" {
-        return(true, input[input.index(input.startIndex, offsetBy: 4)...])
+    if input[...input.index(input.startIndex, offsetBy: 1)] == "#t" {
+        return(true, input[input.index(input.startIndex, offsetBy: 2)...])
     }
-    if input[...input.index(input.startIndex, offsetBy: 4)] == "false" {
-        return(false, input[input.index(input.startIndex, offsetBy: 5)...])
+    if input[...input.index(input.startIndex, offsetBy: 1)] == "#f" {
+        return(false, input[input.index(input.startIndex, offsetBy: 2)...])
     }
     return nil
 }
-
 
 func isDigit(value: Character) -> Bool {
     if value >= "0" && value <= "9" {
@@ -77,6 +77,7 @@ func digitParser(input: Substring) -> ParseResult {
     return (input[input.startIndex..<index], input[index...])
 }
 
+digitParser(input: file)
 
 func exponentParser (input: Substring) -> ParseResult {
     if input[input.startIndex] == "e" || input[input.startIndex] == "E" {
@@ -255,6 +256,8 @@ func defineParser(input: Substring) -> ParseResult {
     var value: Any?
     if let result = paranthesisParser(input: rest) {
         rest = result.rest
+    } else {
+        return nil
     }
     if let result = identifier(input: rest) {
         rest = result.rest
@@ -273,7 +276,7 @@ func defineParser(input: Substring) -> ParseResult {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = expressions(rest) {
+        if let result = expressionParser(input: rest) {
             rest = result.rest
             value = result.output
         }
@@ -284,6 +287,51 @@ func defineParser(input: Substring) -> ParseResult {
     return (output, rest)
 }
 
+
+func expressionParser (input: Substring) -> ParseResult {
+    var rest = input
+    var output: Any?
+    if  let result = boolParser(input: rest) {
+        rest = result.rest
+        output = result.output
+    }
+    if let result = NumberParser(input: rest) {
+        rest = result.rest
+        output = result.output
+    }
+    if let result = stringParser(input: rest) {
+        rest = result.rest
+        output = result.output
+    }
+    
+    if let result = sExpressionParser(input: rest) {
+        rest = result.rest
+        output = result.output
+    }
+    //    enum VariableError: Error {
+    //        case notFound
+    //    }
+    //    if let result = identifier(input: rest) {
+    //        func checkingDictionary (input: Substring) throws {
+    //            if let result = identifier(input: input) {
+    //                if !env.keys.contains(String(describing: result.output)) {
+    //                        throw VariableError.notFound
+    //                } else {
+    //                    rest = result.rest
+    //                    output = env[String(describing: result.output)]
+    //                }
+    //            }
+    //        }
+    //
+    //        do {
+    //            try checkingDictionary(input: rest)
+    //        } catch {
+    //            VariableError.notFound
+    //            print("variable not found")
+    //        }
+    //    }
+    return (output!, rest)
+}
 
 func ifParser (input: Substring) -> ParseResult {
     var rest = input
@@ -302,19 +350,19 @@ func ifParser (input: Substring) -> ParseResult {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = expressions(rest) {
+        if let result = expressionParser(input: rest) {
             rest = result.rest
             expressionArray.append(result.output)
         }
     }
     if String(describing: expressionArray[0]) == "true" {
         output = expressionArray[1]
-    } else {
-        if String(describing: expressionArray[0]) == "false" {
-            output = expressionArray[2]
-        }
     }
-    return (output!, rest)
+    if String(describing: expressionArray[0]) == "false" {
+        output = expressionArray[2]
+    }
+    rest.remove(at: rest.startIndex)
+    return (output as Any, rest)
 }
 
 
@@ -323,14 +371,11 @@ func sExpressionParser (input: Substring) -> ParseResult {
     var output: Any?
     var argArray = [Double]()
     var Operator = ""
-    if rest[rest.startIndex] != "(" {
-        return nil
-    }
+    
     if let result = paranthesisParser(input: rest) {
         rest = result.rest
-    }
-    if let result = spaceParser(input: rest) {
-        rest = result.rest
+    } else {
+        return nil
     }
     if let result = identifier(input: rest) {
         rest = result.rest
@@ -342,46 +387,12 @@ func sExpressionParser (input: Substring) -> ParseResult {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = expressions(rest) {
+        if let result = expressionParser(input: rest) {
             rest = result.rest
-            if env.keys.contains(String(describing: result.output)) {
-                argArray.append(env[String(describing: result.output)] as! Double)
-            } else {
-                argArray.append(result.output as! Double)
-            }
-            if argArray.count > 1 {
-                output = (env[Operator] as! ([Double]) -> Any)(argArray)
-            }
+            argArray.append(result.output as! Double)
         }
     }
-    rest = rest[input.index(after: rest.startIndex)...]
+    output = (env[Operator] as! ([Double]) -> Any)(argArray )
+    rest.remove(at: rest.startIndex)
     return (output!, rest)
 }
-
-func specialFormParser (input: Substring) -> ParseResult {
-    var rest = input
-    var output: Any?
-    if let result = defineParser(input: rest) {
-        rest = result.rest
-        output = result.output
-    }
-    if let result = spaceParser(input: rest) {
-        rest = result.rest
-    }
-    if let result = ifParser(input: rest) {
-        rest = result.rest
-        output = result.output
-    }
-    
-    if let result = expressions(rest) {
-        output = result.output
-        rest = result.rest
-    }
-    return (output!, rest)
-}
-
-let expressions = factoryParser(parsers: identifier, boolParser, NumberParser, stringParser, sExpressionParser)
-//sExpressionParser(input: file)?.output
-ifParser(input: file)
-defineParser(input: file)
-specialFormParser(input: file)
