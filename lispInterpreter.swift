@@ -16,7 +16,8 @@ env = ["+" : {(input: [Double]) -> Any in (input.reduce(0, {$0 + $1}))},
        ">=": {(input: [Double]) -> Any in (input[0] >= input[1])},
        "<": {(input: [Double]) -> Any in (input[0] < input[1])},
        "<=": {(input: [Double]) -> Any in (input[0] <= input[1])},
-       "=": {(input: [Double]) -> Any in (input[0] == input[1])}
+       "=": {(input: [Double]) -> Any in (input[0] == input[1])},
+       "abc": 8
 ]
 
 func paranthesisParser(input: Substring) -> (output: Any, rest: Substring)? {
@@ -26,13 +27,6 @@ func paranthesisParser(input: Substring) -> (output: Any, rest: Substring)? {
     return nil
 }
 
-
-func isOperator (arithmaticOperator: Character) -> Bool {
-    switch arithmaticOperator {
-    case "+", "-", "*", "/", ">", "<", "=" : return true
-    default: return false
-    }
-}
 
 func isAlphabet (char: Character) -> Bool {
     if (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") {
@@ -54,6 +48,7 @@ func boolParser (input: Substring) -> ParseResult {
     }
     return nil
 }
+
 
 func isDigit(value: Character) -> Bool {
     if value >= "0" && value <= "9" {
@@ -77,7 +72,6 @@ func digitParser(input: Substring) -> ParseResult {
     return (input[input.startIndex..<index], input[index...])
 }
 
-digitParser(input: file)
 
 func exponentParser (input: Substring) -> ParseResult {
     if input[input.startIndex] == "e" || input[input.startIndex] == "E" {
@@ -150,7 +144,7 @@ func intFloatParser (input: Substring) -> ParseResult {
 }
 
 
-func NumberParser(input: Substring) -> ParseResult {
+func numberParser(input: Substring) -> ParseResult {
     var index = input.startIndex
     if input[index] == "-" {
         index = input.index(after: index)
@@ -166,8 +160,7 @@ func NumberParser(input: Substring) -> ParseResult {
         let length = (result.output as! Substring).count
         index = input.index(index, offsetBy: length)
     }
-    let output = Double(input[..<index])!
-    return (output, input[index...] )
+    return (Double(input[..<index])!, input[index...] )
 }
 
 
@@ -232,22 +225,35 @@ func factoryParser (parsers: Parser...) -> Parser {
 }
 
 
+func symbolParser (input: Substring) -> ParseResult {
+    var index = input.startIndex
+    if isSpace(space: input[index]) {
+        return nil
+    }
+    while !isSpace(space: input[index]) {
+        index = input.index(after: index)
+        if input[index] == ")" {
+            break
+        }
+    }
+    return(input[..<index], input[index...])
+}
+
 func identifier (input: Substring) -> ParseResult {
     var index = input.startIndex
-    if isOperator(arithmaticOperator: input[index]) {
-        if input[input.index(after: index)] == "=" {
-            index = input.index(after: index)
-        }
-        return(input[...index], input[input.index(after: index)...])
+    var output: Any?
+    if !isAlphabet(char: input[index]) {
+        return nil
     }
-    if isAlphabet(char: input[index]) {
-        while isAlphabet(char: input[index]) {
-            index = input.index(after: index)
-        }
-        return(String(input[..<index]), input[index...])
+    while isAlphabet(char: input[index]) {
+        index = input.index(after: index)
     }
-    return nil
+    if env.keys.contains(String(describing: input[..<index])) {
+        output = env[String(describing: input[..<index])]
+    }
+    return (output!, input[index...])
 }
+
 
 func defineParser(input: Substring) -> ParseResult {
     var rest = input
@@ -259,7 +265,7 @@ func defineParser(input: Substring) -> ParseResult {
     } else {
         return nil
     }
-    if let result = identifier(input: rest) {
+    if let result = symbolParser(input: rest) {
         rest = result.rest
         if String(describing: result.output) != "define" {
             return nil
@@ -269,16 +275,17 @@ func defineParser(input: Substring) -> ParseResult {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = identifier(input: rest) {
+        if let result = symbolParser(input: rest) {
             rest = result.rest
             key = String(describing: result.output)
         }
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = expressionParser(input: rest) {
-            rest = result.rest
+        if let result = expressionParser(rest) {
             value = result.output
+            result.output
+            rest = result.rest
         }
         output[key] = value
         env[key] = value
@@ -287,51 +294,6 @@ func defineParser(input: Substring) -> ParseResult {
     return (output, rest)
 }
 
-
-func expressionParser (input: Substring) -> ParseResult {
-    var rest = input
-    var output: Any?
-    if  let result = boolParser(input: rest) {
-        rest = result.rest
-        output = result.output
-    }
-    if let result = NumberParser(input: rest) {
-        rest = result.rest
-        output = result.output
-    }
-    if let result = stringParser(input: rest) {
-        rest = result.rest
-        output = result.output
-    }
-    
-    if let result = sExpressionParser(input: rest) {
-        rest = result.rest
-        output = result.output
-    }
-    //    enum VariableError: Error {
-    //        case notFound
-    //    }
-    //    if let result = identifier(input: rest) {
-    //        func checkingDictionary (input: Substring) throws {
-    //            if let result = identifier(input: input) {
-    //                if !env.keys.contains(String(describing: result.output)) {
-    //                        throw VariableError.notFound
-    //                } else {
-    //                    rest = result.rest
-    //                    output = env[String(describing: result.output)]
-    //                }
-    //            }
-    //        }
-    //
-    //        do {
-    //            try checkingDictionary(input: rest)
-    //        } catch {
-    //            VariableError.notFound
-    //            print("variable not found")
-    //        }
-    //    }
-    return (output!, rest)
-}
 
 func ifParser (input: Substring) -> ParseResult {
     var rest = input
@@ -350,7 +312,7 @@ func ifParser (input: Substring) -> ParseResult {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = expressionParser(input: rest) {
+        if let result = expressionParser(rest) {
             rest = result.rest
             expressionArray.append(result.output)
         }
@@ -370,29 +332,74 @@ func sExpressionParser (input: Substring) -> ParseResult {
     var rest = input
     var output: Any?
     var argArray = [Double]()
-    var Operator = ""
+    var symbol: Any?
     
     if let result = paranthesisParser(input: rest) {
         rest = result.rest
     } else {
         return nil
     }
-    if let result = identifier(input: rest) {
+    if let result = lambdaParser(input: rest) {
+        rest = result.rest
+        symbol = result.output
+    }
+    if let result = symbolParser(input: rest) {
         rest = result.rest
         if env.keys.contains(String(describing: result.output)) {
-            Operator = String(describing: result.output)
+            symbol = env[String(describing: result.output)]
         }
     }
     while rest[rest.startIndex] != ")" {
         if let result = spaceParser(input: rest) {
             rest = result.rest
         }
-        if let result = expressionParser(input: rest) {
+        if let result = expressionParser(rest) {
             rest = result.rest
             argArray.append(result.output as! Double)
         }
     }
-    output = (env[Operator] as! ([Double]) -> Any)(argArray )
+    output = (symbol as! ([Double]) -> Any)(argArray)
     rest.remove(at: rest.startIndex)
     return (output!, rest)
 }
+
+
+func lambdaParser (input: Substring) -> ParseResult {
+    var rest = input
+    var output: Any?
+    if let result = paranthesisParser(input: rest) {
+        rest = result.rest
+    }
+    if let result = spaceParser(input: rest) {
+        rest = result.rest
+    }
+    if let result = symbolParser(input: rest) {
+        rest = result.rest
+        if String(describing: result.output) != "lambda" {
+            return nil
+        }
+    }
+    var index = rest.startIndex
+    while rest[index] != ")" {
+        index = rest.index(after: index)
+    }
+    index = rest.index(index, offsetBy: 3)
+    rest = rest[index...]
+    if let result = paranthesisParser(input: rest) {
+        rest = result.rest
+    }
+    if let result = symbolParser(input: rest) {
+        output = env[String(describing: result.output)]
+        rest = result.rest
+        index = rest.startIndex
+    }
+    while rest[index] != ")" {
+        index = rest.index(after: index)
+    }
+    rest = rest[rest.index(index, offsetBy: 2)...]
+    return (output as Any, rest)
+}
+
+let expressionParser = factoryParser(parsers: boolParser, numberParser, stringParser, lambdaParser, sExpressionParser, identifier)
+
+defineParser(input: file)
